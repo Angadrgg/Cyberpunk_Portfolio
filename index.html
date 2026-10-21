@@ -30,6 +30,7 @@
 
     html {
       scroll-behavior: smooth;
+      scroll-padding-top: 80px;
     }
 
     body {
@@ -4214,30 +4215,130 @@
       });
     }, { threshold: 0.18 });
 
-    /* Nav Active Scroll Spy */
-    const spyObs = new IntersectionObserver(entries => {
-      entries.forEach(e => {
-        if (e.isIntersecting) {
-          document.querySelectorAll('.nav-center a').forEach(l => l.classList.remove('active'));
-          const a = document.querySelector(`.nav-center a[href="#${e.target.id}"]`);
-          if (a) a.classList.add('active');
-        }
-      });
-    }, { threshold: 0.2 });
+    /* ══════════════════════════════════════
+       NAV ACTIVE SCROLL SPY & SMOOTH CLICK
+    ══════════════════════════════════════ */
+    let isClickScrolling = false;
+    let scrollTimeout = null;
 
-    window.addEventListener('scroll', () => {
-      if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 50) {
-        document.querySelectorAll('.nav-center a').forEach(l => l.classList.remove('active'));
-        const contactLink = document.querySelector(`.nav-center a[href="#contact"]`);
+    const navLinks = document.querySelectorAll('.nav-center a');
+    const sections = ['skills', 'work', 'terminal', 'contact']
+      .map(id => document.getElementById(id))
+      .filter(Boolean);
+
+    function updateActiveNav() {
+      if (isClickScrolling) return;
+
+      const scrollY = window.scrollY || window.pageYOffset;
+      const skillsEl = document.getElementById('skills');
+
+      // 1. If at or near top (in Hero/Name section), remove all active highlights
+      if (skillsEl && scrollY < skillsEl.offsetTop - 180) {
+        navLinks.forEach(l => l.classList.remove('active'));
+        return;
+      }
+
+      // 2. If at absolute bottom of page, highlight contact
+      const atBottom = (window.innerHeight + scrollY) >= (document.documentElement.scrollHeight - 25);
+      if (atBottom) {
+        navLinks.forEach(l => l.classList.remove('active'));
+        const contactLink = document.querySelector('.nav-center a[href="#contact"]');
         if (contactLink) contactLink.classList.add('active');
+        return;
+      }
+
+      // 3. Find which section is currently centered/active in viewport
+      let activeSectionId = null;
+      const probeY = scrollY + 130; // Target line below fixed navbar
+
+      for (let i = 0; i < sections.length; i++) {
+        const sec = sections[i];
+        const top = sec.offsetTop;
+        const bottom = top + sec.offsetHeight;
+
+        if (probeY >= top && probeY < bottom) {
+          activeSectionId = sec.id;
+          break;
+        }
+      }
+
+      // Fallback: If between sections, pick the closest one
+      if (!activeSectionId && sections.length) {
+        let minDiff = Infinity;
+        sections.forEach(sec => {
+          const diff = Math.abs(sec.offsetTop - probeY);
+          if (diff < minDiff) {
+            minDiff = diff;
+            activeSectionId = sec.id;
+          }
+        });
+      }
+
+      if (activeSectionId) {
+        navLinks.forEach(l => l.classList.remove('active'));
+        const targetLink = document.querySelector(`.nav-center a[href="#${activeSectionId}"]`);
+        if (targetLink) targetLink.classList.add('active');
+      }
+    }
+
+    // Scroll listener with requestAnimationFrame throttle
+    let ticking = false;
+    window.addEventListener('scroll', () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          updateActiveNav();
+          ticking = false;
+        });
+        ticking = true;
       }
     }, { passive: true });
+
+    // Smooth click handlers for nav links
+    navLinks.forEach(link => {
+      link.addEventListener('click', e => {
+        const href = link.getAttribute('href');
+        if (!href || !href.startsWith('#')) return;
+        const target = document.querySelector(href);
+        if (!target) return;
+
+        e.preventDefault();
+        navLinks.forEach(l => l.classList.remove('active'));
+        link.classList.add('active');
+
+        isClickScrolling = true;
+        clearTimeout(scrollTimeout);
+
+        const targetTop = target.getBoundingClientRect().top + window.pageYOffset - 75;
+        window.scrollTo({ top: targetTop, behavior: 'smooth' });
+
+        scrollTimeout = setTimeout(() => {
+          isClickScrolling = false;
+          updateActiveNav();
+        }, 850);
+      });
+    });
+
+    // Clicking logo scrolls to top (Name/Hero section)
+    const navLogo = document.querySelector('.nav-logo');
+    if (navLogo) {
+      navLogo.style.cursor = 'pointer';
+      navLogo.addEventListener('click', () => {
+        isClickScrolling = true;
+        clearTimeout(scrollTimeout);
+        navLinks.forEach(l => l.classList.remove('active'));
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        scrollTimeout = setTimeout(() => {
+          isClickScrolling = false;
+          updateActiveNav();
+        }, 850);
+      });
+    }
 
     // attach after preloader (called from revealInit)
     function sdInit() {
       document.querySelectorAll('.sd-obs,.sd-count-trig,.sd-marquee-trig,.sd-card,.sd-split-trig,.sd-tl-trig')
         .forEach(el => sdObs.observe(el));
-      document.querySelectorAll('section[id]').forEach(el => spyObs.observe(el));
+      updateActiveNav();
     }
 
     /* ══════════════════════════════════════
